@@ -1,0 +1,33 @@
+{
+  "name": "ponto",
+  "version": "0.0.1",
+  "description": "PICO-8/JS Bridge",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --compilers js:babel-core/register",
+    "build": "babel index.js -o dist.js",
+    "build-controller": "babel index.js controller.js -o build.js",
+    "prepublish": "npm run build"
+  },
+  "keywords": [
+    "pico8"
+  ],
+  "author": "Justin Jaffray",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/justinj/ponto.git"
+  },
+  "bugs": {
+    "url": "https://github.com/justinj/ponto/issues"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "babel-core": "^6.2.1",
+    "babel-eslint": "^5.0.0",
+    "babel-preset-es2015": "^6.1.18",
+    "babel-preset-stage-2": "^6.1.18",
+    "eslint": "^2.1.0",
+    "mocha": "^2.3.4"
+  },
+  "dependencies": {}
+}
