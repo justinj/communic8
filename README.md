@@ -51,3 +51,14 @@ let response = bridge.send(addInvocation);
          ^
          |
          1 if should be read, 0 if not (set to 0 by the reader)
+
+
+
+## Packet-based format
+
+9-byte packets,
+1-byte header, then 14 9-byte packets.
+
+each packet having a 1-byte header indicating its id
+
+we operate under the assumption that every message will arrive in the order it is sent (which is a reasonable assumption)

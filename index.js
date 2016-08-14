@@ -1,3 +1,7 @@
+const BUFFER_SIZE = 128;
+// we always reserve a header byte
+const USABLE_BUFFER_SIZE = 127;
+
 export function RPC(spec) {
   let serialize;
   serialize = function(...args) {
@@ -111,11 +115,12 @@ function startPolling() {
 }
 
 let writeQueue = [];
-function defaultWriter(data) {
-  writeQueue.push(data);
+function defaultWriter(id, data) {
+  writeQueue.push([id, ...data]);
 }
 
-export function connect(args={ reader: defaultReader, writer: defaultWriter}) {
+export function connect(args={ reader: defaultReader, writer: defaultWriter }) {
+  (typeof window !== 'undefined' ? window : global).pico8_gpio = new Array(128).fill(0);
   let reader = args.reader;
   let writer = args.writer;
   let subscription = reader(function(data) {
@@ -139,7 +144,7 @@ export function connect(args={ reader: defaultReader, writer: defaultWriter}) {
           nextId = (nextId + 1) % 256;
         }
         let id = nextId;
-        writer([id, ...data]);
+        writer(id, data);
         pendingInvocations[id] = { resolve, reject, id, rpc };
       });
     },
@@ -148,4 +153,68 @@ export function connect(args={ reader: defaultReader, writer: defaultWriter}) {
       subscription();
     }
   };
+}
+
+function encode({ id, data }) {
+  let length = data.length + 1; // + 1 for id
+  return [Math.floor(length / 256), length % 256, id, ...data];
+}
+
+export function scheduler({ write, writable, usableBufferSize=127 }) {
+  let writeQueue = [];
+
+  return {
+    send: function(message) {
+      writeQueue.push(...encode(message));
+    },
+    tick: function() {
+      if (writeQueue.length > 0 && writable()) {
+        write(writeQueue.splice(0, usableBufferSize));
+      }
+    }
+  };
+}
+
+export function makeReader({ check, consume, subscribe, cancel }) {
+  let listeners = [];
+  let subscription = function(cb) {
+    if (listeners.length === 0) {
+      subscribe();
+    }
+    listeners.push(cb);
+
+    return function() {
+      listeners = listeners.filter(l => l !== cb);
+      if (listeners.length === 0) {
+        cancel();
+      }
+    }
+  };
+
+  function notify(data) {
+  }
+
+  function *receive() {
+    while (true) {
+      let length = (yield);
+      length = length * 256 + (yield);
+      let next = [];
+      for (let i = 0; i < length; i++) {
+        next.push(yield);
+      }
+      listeners.forEach(l => l(next));
+    }
+  }
+
+  let receiver = receive();
+  receiver.next();
+  subscription.tick = function() {
+    let ary = check();
+    if ((ary[0] & 1) && !(ary[0] & 2)) {
+      ary.slice(1).forEach(b => receiver.next(b));
+      consume();
+    }
+  }
+
+  return subscription;
 }

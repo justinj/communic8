@@ -1,6 +1,7 @@
 import assert from 'assert';
+import 'babel-polyfill';
 
-import { RPC, ArgTypes, connect } from './index';
+import { RPC, ArgTypes, connect, scheduler, encode, makeReader } from './index';
 
 function andThen(fn) {
   setTimeout(fn, 0);
@@ -84,20 +85,30 @@ describe('encodings', function() {
   });
 });
 
-function makeMock() {
+function makeMock({ messagesBeforeRespond }={ messagesBeforeRespond: 1 }) {
   let writer;
   let mockReader = function(cb) {
     writer = cb;
     return function() {};
   }
-
+  let listeners = [];
   let mockWriter = function(data) {
+    listeners.forEach(l => l(data));
   }
+
+  let queue = [];
   return {
     reader: mockReader,
     writer: mockWriter,
     push: function(...x) {
-      writer(...x)
+      queue.push(x);
+      if (queue.length >= messagesBeforeRespond) {
+        queue.forEach(x => writer(...x));
+        queue = [];
+      }
+    },
+    onMessage: function(cb) {
+      listeners.push(cb);
     }
   }
 }
@@ -144,5 +155,205 @@ describe('talking to the bridge', function() {
       assert.deepEqual(ten, [10]);
       done();
     });
+  });
+});
+
+describe('scheduler', function() {
+  it('sends a message on tick', function() {
+    let receivedMessage;
+    let s = scheduler({
+      write: function(data) {
+        receivedMessage = data;
+      },
+      writable: () => true
+    });
+
+    s.send({id: 0, data: [1, 2, 3]});
+    assert.deepEqual(receivedMessage, undefined);
+    s.tick();
+    assert.deepEqual(receivedMessage, [0, 4, 0, 1, 2, 3]);
+  });
+
+  it('doesnt send a message twice', function() {
+    let timesCalled = 0;
+    let s = scheduler({
+      write: function(data) {
+        timesCalled += 1;
+      },
+      writable: () => true
+    });
+
+    s.send({id: 0, data: [1, 2, 3]});
+    assert.equal(timesCalled, 0);
+    s.tick();
+    assert.equal(timesCalled, 1);
+    s.tick();
+    assert.equal(timesCalled, 1);
+  });
+
+  it('doesnt write if writable is false', function() {
+    let timesCalled = 0;
+    let s = scheduler({
+      write: function(data) {
+        timesCalled += 1;
+      },
+      writable: () => false
+    });
+
+    s.send({id: 0, data: [1, 2, 3]});
+    assert.equal(timesCalled, 0);
+    s.tick();
+    assert.equal(timesCalled, 0);
+    s.tick();
+    assert.equal(timesCalled, 0);
+  });
+
+  it('batches together messages', function() {
+    let receivedMessage;
+    let s = scheduler({
+      write: function(data) {
+        receivedMessage = data;
+      },
+      writable: () => true
+    });
+
+    s.send({id: 0, data: [1, 2, 3]});
+    s.send({id: 1, data: [4, 5, 6]});
+    s.tick();
+    assert.deepEqual(receivedMessage, [0, 4, 0, 1, 2, 3, 0, 4, 1, 4, 5, 6]);
+  });
+
+  it('breaks up real big messages over multiple messages', function() {
+    let realBigMessage = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let receivedMessages = [];
+    let s = scheduler({
+      write: function(data) {
+        receivedMessages.push(data);
+      },
+      writable: () => true,
+      usableBufferSize: 10
+    });
+
+    s.send({id: 0, data: realBigMessage});
+    s.tick();
+    s.tick();
+    assert.deepEqual(
+      receivedMessages,
+      [[0, 11, 0, 1, 2, 3, 4, 5, 6, 7],
+       [8, 9, 10]]
+    );
+  });
+});
+
+describe('reader', function() {
+  it('turns a stream of buffers into a stream of messages', function() {
+    let buffer = [];
+    let reader = makeReader({
+      check: () => buffer,
+      consume: () => {},
+      subscribe: () => {},
+      cancel: () => {}
+    });
+    let messages = [];
+    reader(function(message) {
+      messages.push(message);
+    });
+    buffer = [1, 0, 5, 1, 2];
+    reader.tick();
+    buffer = [1, 3, 4, 5, 6];
+    reader.tick();
+    assert.deepEqual(
+      messages,
+      [[1, 2, 3, 4, 5]]
+    );
+  });
+
+  it('doesnt read if the read bit isnt set appropriately', function() {
+    let buffer = [];
+    let reader = makeReader({
+      check: () => buffer,
+      consume: () => {},
+      subscribe: () => {},
+      cancel: () => {}
+    });
+    let messages = [];
+    reader(function(message) {
+      messages.push(message);
+    });
+    buffer = [1, 0, 5, 1, 2];
+    reader.tick();
+    buffer = [0, 3, 4, 5, 6];
+    reader.tick();
+    assert.deepEqual(
+      messages,
+      []
+    );
+  });
+  
+  it('doesnt read if the writer bit isnt set appropriately', function() {
+    let buffer = [];
+    let reader = makeReader({
+      check: () => buffer,
+      consume: () => {},
+      subscribe: () => {},
+      cancel: () => {}
+    });
+    let messages = [];
+    reader(function(message) {
+      messages.push(message);
+    });
+    buffer = [1, 0, 5, 1, 2];
+    reader.tick();
+    buffer = [3, 3, 4, 5, 6];
+    reader.tick();
+    assert.deepEqual(
+      messages,
+      []
+    );
+  });
+
+  it('calls the consume function after consuming a function', function() {
+    let buffer = [];
+    let consumed = false;
+    let reader = makeReader({
+      check: () => buffer,
+      consume: () => { consumed = true; },
+      subscribe: () => {},
+      cancel: () => {}
+    });
+    reader(function() { });
+    buffer = [1, 0, 5, 1, 2];
+    reader.tick();
+    assert(consumed);
+  });
+
+  it('doesnt start listening until it has listeners', function() {
+    let buffer = [];
+    let subscribed = false;
+    let reader = makeReader({
+      check: () => buffer,
+      consume: () => {},
+      subscribe: () => { subscribed = true; },
+      cancel: () => {}
+    });
+    assert(!subscribed);
+    reader(function() {});
+    assert(subscribed);
+  });
+
+  it('cancels the subscription when there are no listeners', function() {
+    let buffer = [];
+    let subscribed = false;
+    let reader = makeReader({
+      check: () => buffer,
+      consume: () => {},
+      subscribe: () => { subscribed = true; },
+      cancel: () => { subscribed = false; }
+    });
+    assert(!subscribed);
+    let subscription = reader(function() {});
+    assert(subscribed);
+    subscription();
+    assert(!subscribed);
   });
 });
