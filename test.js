@@ -171,7 +171,7 @@ describe('scheduler', function() {
     s.send({id: 0, data: [1, 2, 3]});
     assert.deepEqual(receivedMessage, undefined);
     s.tick();
-    assert.deepEqual(receivedMessage, [0, 4, 0, 1, 2, 3]);
+    assert.deepEqual(receivedMessage, [1, 0, 4, 0, 1, 2, 3]);
   });
 
   it('doesnt send a message twice', function() {
@@ -220,7 +220,7 @@ describe('scheduler', function() {
     s.send({id: 0, data: [1, 2, 3]});
     s.send({id: 1, data: [4, 5, 6]});
     s.tick();
-    assert.deepEqual(receivedMessage, [0, 4, 0, 1, 2, 3, 0, 4, 1, 4, 5, 6]);
+    assert.deepEqual(receivedMessage, [1, 0, 4, 0, 1, 2, 3, 1, 0, 4, 1, 4, 5, 6]);
   });
 
   it('breaks up real big messages over multiple messages', function() {
@@ -239,8 +239,8 @@ describe('scheduler', function() {
     s.tick();
     assert.deepEqual(
       receivedMessages,
-      [[0, 11, 0, 1, 2, 3, 4, 5, 6, 7],
-       [8, 9, 10]]
+      [[1, 0, 11, 0, 1, 2, 3, 4, 5, 6],
+       [7, 8, 9, 10]]
     );
   });
 });
@@ -252,13 +252,12 @@ describe('reader', function() {
       check: () => buffer,
       consume: () => {},
       subscribe: () => {},
-      cancel: () => {}
     });
     let messages = [];
     reader(function(message) {
       messages.push(message);
     });
-    buffer = [1, 0, 5, 1, 2];
+    buffer = [1, 1, 0, 5, 1, 2];
     reader.tick();
     buffer = [1, 3, 4, 5, 6];
     reader.tick();
@@ -268,19 +267,39 @@ describe('reader', function() {
     );
   });
 
+  it('ignores 0s between messages', function() {
+    let buffer = [];
+    let reader = makeReader({
+      check: () => buffer,
+      consume: () => {},
+      subscribe: () => {},
+    });
+    let messages = [];
+    reader(function(message) {
+      messages.push(message);
+    });
+    buffer = [1, 1, 0, 5, 1, 2];
+    reader.tick();
+    buffer = [1, 3, 4, 5, 0, 0, 0, 0, 1, 0, 1, 1];
+    reader.tick();
+    assert.deepEqual(
+      messages,
+      [[1, 2, 3, 4, 5], [1]]
+    );
+  });
+
   it('doesnt read if the read bit isnt set appropriately', function() {
     let buffer = [];
     let reader = makeReader({
       check: () => buffer,
       consume: () => {},
       subscribe: () => {},
-      cancel: () => {}
     });
     let messages = [];
     reader(function(message) {
       messages.push(message);
     });
-    buffer = [1, 0, 5, 1, 2];
+    buffer = [1, 1, 0, 5, 1, 2];
     reader.tick();
     buffer = [0, 3, 4, 5, 6];
     reader.tick();
@@ -296,13 +315,12 @@ describe('reader', function() {
       check: () => buffer,
       consume: () => {},
       subscribe: () => {},
-      cancel: () => {}
     });
     let messages = [];
     reader(function(message) {
       messages.push(message);
     });
-    buffer = [1, 0, 5, 1, 2];
+    buffer = [1, 1, 0, 5, 1, 2];
     reader.tick();
     buffer = [3, 3, 4, 5, 6];
     reader.tick();
@@ -312,17 +330,16 @@ describe('reader', function() {
     );
   });
 
-  it('calls the consume function after consuming a function', function() {
+  it('calls the consume function after consuming a message', function() {
     let buffer = [];
     let consumed = false;
     let reader = makeReader({
       check: () => buffer,
       consume: () => { consumed = true; },
       subscribe: () => {},
-      cancel: () => {}
     });
     reader(function() { });
-    buffer = [1, 0, 5, 1, 2];
+    buffer = [1, 1, 0, 5, 1, 2];
     reader.tick();
     assert(consumed);
   });
@@ -334,7 +351,6 @@ describe('reader', function() {
       check: () => buffer,
       consume: () => {},
       subscribe: () => { subscribed = true; },
-      cancel: () => {}
     });
     assert(!subscribed);
     reader(function() {});
@@ -347,8 +363,10 @@ describe('reader', function() {
     let reader = makeReader({
       check: () => buffer,
       consume: () => {},
-      subscribe: () => { subscribed = true; },
-      cancel: () => { subscribed = false; }
+      subscribe: () => {
+        subscribed = true;
+        return () => subscribed = false;
+      },
     });
     assert(!subscribed);
     let subscription = reader(function() {});

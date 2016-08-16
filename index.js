@@ -1,3 +1,5 @@
+//import 'babel-polyfill';
+
 const BUFFER_SIZE = 128;
 // we always reserve a header byte
 const USABLE_BUFFER_SIZE = 127;
@@ -79,29 +81,28 @@ export const ArgTypes = {
 };
 
 let listeners = [];
-function defaultReader(cb) {
-  listeners.push(cb);
-  startPolling();
-  return function() {
-    listeners.filter(l => l !== cb);
-    if (listeners.length === 0) {
-      polling = false;
-    }
-  }
-}
 
-function poll() {
-  if ((window.pico8_gpio[0] & 1) && (window.pico8_gpio[0] & 2)) { 
-    window.pico8_gpio[0] &= ~2;
-    listeners.forEach(l => l(window.pico8_gpio.slice(1)));
-  } else if (writeQueue.length > 0 && !(window.pico8_gpio[0] & 2)) {
-    let data = writeQueue.pop();
-    window.pico8_gpio[0] = 2;
-    console.log('writing', data);
+let theScheduler = scheduler({
+  write: function(data) {
+    window.pico8_gpio.fill(0);
+    window.pico8_gpio[0] = 3;
     for (let i = 0; i < data.length; i++) {
       window.pico8_gpio[i + 1] = data[i];
     }
+  },
+  writable: () => {
+    return !(window.pico8_gpio[0] & 2);j
   }
+});
+function defaultWriter(id, data) {
+  theScheduler.send({ id, data });
+}
+
+function poll() {
+  for (let i = 0; i < listeners.length; i++) {
+    listeners[i]();
+  }
+  theScheduler.tick();
   if (polling) {
     requestAnimationFrame(poll);
   }
@@ -114,12 +115,67 @@ function startPolling() {
   requestAnimationFrame(poll);
 }
 
-let writeQueue = [];
-function defaultWriter(id, data) {
-  writeQueue.push([id, ...data]);
+export function makeReader({ check, consume, subscribe }) {
+  let listeners = [];
+  let subscription;
+  let reader;
+  reader = function(cb) {
+    if (listeners.length === 0) {
+      subscription = subscribe(reader.tick);
+    }
+    listeners.push(cb);
+
+    return function() {
+      listeners = listeners.filter(l => l !== cb);
+      if (listeners.length === 0 && subscription) {
+        subscription();
+        subscription = null;
+      }
+    }
+  };
+
+  function *receive() {
+    while (true) {
+      // get to the header bit...
+      while ((yield) === 0) {}
+      let length = (yield);
+      length = length * 256 + (yield);
+      let next = [];
+      for (let i = 0; i < length; i++) {
+        next.push(yield);
+      }
+      listeners.forEach(l => l(next));
+    }
+  }
+
+  let receiver = receive();
+  receiver.next();
+  reader.tick = function() {
+    let ary = check();
+    if ((ary[0] & 1) && !(ary[0] & 2)) {
+      ary.slice(1).forEach(b => receiver.next(b));
+      consume();
+    }
+  }
+
+  return reader;
 }
 
-export function connect(args={ reader: defaultReader, writer: defaultWriter }) {
+
+let unsub;
+let reader = makeReader({
+  check: () => pico8_gpio,
+  consume: () => { pico8_gpio[0] &= ~1; },
+  subscribe: (tick) => {
+    unsub = listeners.push(tick);
+    startPolling(tick);
+  },
+  unsubscribe: () => {
+    unsub();
+  }
+});
+
+export function connect(args={ reader, writer: defaultWriter }) {
   (typeof window !== 'undefined' ? window : global).pico8_gpio = new Array(128).fill(0);
   let reader = args.reader;
   let writer = args.writer;
@@ -157,7 +213,7 @@ export function connect(args={ reader: defaultReader, writer: defaultWriter }) {
 
 function encode({ id, data }) {
   let length = data.length + 1; // + 1 for id
-  return [Math.floor(length / 256), length % 256, id, ...data];
+  return [1, Math.floor(length / 256), length % 256, id, ...data];
 }
 
 export function scheduler({ write, writable, usableBufferSize=127 }) {
@@ -173,48 +229,4 @@ export function scheduler({ write, writable, usableBufferSize=127 }) {
       }
     }
   };
-}
-
-export function makeReader({ check, consume, subscribe, cancel }) {
-  let listeners = [];
-  let subscription = function(cb) {
-    if (listeners.length === 0) {
-      subscribe();
-    }
-    listeners.push(cb);
-
-    return function() {
-      listeners = listeners.filter(l => l !== cb);
-      if (listeners.length === 0) {
-        cancel();
-      }
-    }
-  };
-
-  function notify(data) {
-  }
-
-  function *receive() {
-    while (true) {
-      let length = (yield);
-      length = length * 256 + (yield);
-      let next = [];
-      for (let i = 0; i < length; i++) {
-        next.push(yield);
-      }
-      listeners.forEach(l => l(next));
-    }
-  }
-
-  let receiver = receive();
-  receiver.next();
-  subscription.tick = function() {
-    let ary = check();
-    if ((ary[0] & 1) && !(ary[0] & 2)) {
-      ary.slice(1).forEach(b => receiver.next(b));
-      consume();
-    }
-  }
-
-  return subscription;
 }
