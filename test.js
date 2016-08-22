@@ -1,7 +1,7 @@
 import assert from 'assert';
 import 'babel-polyfill';
 
-import { RPC, ArgTypes, connect, scheduler, encode, makeReader } from './index';
+import { RPC, ArgTypes, connect, _makeReader } from './index';
 
 function andThen(fn) {
   setTimeout(fn, 0);
@@ -31,8 +31,8 @@ describe('encodings', function() {
     });
 
     it('deserializes a byte', function() {
-      assert.deepEqual(ArgTypes.Byte.deserialize([45]), [45, []]);
-      assert.deepEqual(ArgTypes.Byte.deserialize([45, 1, 2]), [45, [1, 2]]);
+      assert.deepEqual(ArgTypes.Byte.deserialize([45], 0), [45, 1]);
+      assert.deepEqual(ArgTypes.Byte.deserialize([1, 45, 2], 1), [45, 2]);
     });
   });
 
@@ -52,15 +52,15 @@ describe('encodings', function() {
     });
 
     it('decodes a whole PICO-8 number', function() {
-      assert.deepEqual(ArgTypes.Number.deserialize([0, 10, 0, 0]), [10, []]);
-      assert.deepEqual(ArgTypes.Number.deserialize([1, 44, 0, 0]), [300, []]);
+      assert.deepEqual(ArgTypes.Number.deserialize([0, 10, 0, 0], 0), [10, 4]);
+      assert.deepEqual(ArgTypes.Number.deserialize([1, 44, 0, 0], 0), [300, 4]);
     });
 
     it('decodes a fractional PICO-8 number', function() {
-      assert.deepEqual(ArgTypes.Number.deserialize([0, 0, 128, 0]), [0.5, []]);
-      assert.deepEqual(ArgTypes.Number.deserialize([0, 0, 192, 0]), [0.75, []]);
-      assert.deepEqual(ArgTypes.Number.deserialize([0, 0, 64, 0]), [0.25, []]);
-      assert.deepEqual(ArgTypes.Number.deserialize([255, 246, 0, 0]), [-10, []]);
+      assert.deepEqual(ArgTypes.Number.deserialize([0, 0, 128, 0], 0), [0.5, 4]);
+      assert.deepEqual(ArgTypes.Number.deserialize([0, 0, 192, 0], 0), [0.75, 4]);
+      assert.deepEqual(ArgTypes.Number.deserialize([0, 0, 64, 0], 0), [0.25, 4]);
+      assert.deepEqual(ArgTypes.Number.deserialize([255, 246, 0, 0], 0), [-10, 4]);
       // close enough
       //assert.deepEqual(ArgTypes.Number.deserialize([0, 0, 0, 64]), 0.0009842);
       //assert.deepEqual(ArgTypes.Number.deserialize([55, 154, 31, 133]), 14234.123132);
@@ -75,11 +75,11 @@ describe('encodings', function() {
     });
 
     it('decodes an array of a particular type', function() {
-      assert.deepEqual(ArgTypes.Array(ArgTypes.Byte).deserialize([0, 0]), [[], []]);
-      assert.deepEqual(ArgTypes.Array(ArgTypes.Byte).deserialize([0, 2, 123, 121]), [[123, 121], []]);
+      assert.deepEqual(ArgTypes.Array(ArgTypes.Byte).deserialize([0, 0], 0), [[], 2]);
+      assert.deepEqual(ArgTypes.Array(ArgTypes.Byte).deserialize([0, 2, 123, 121], 0), [[123, 121], 4]);
       assert.deepEqual(
-        ArgTypes.Array(ArgTypes.Number).deserialize([0, 2, 0, 123, 0, 0, 0, 121, 0, 0]),
-        [[123, 121], []]
+        ArgTypes.Array(ArgTypes.Number).deserialize([0, 2, 0, 123, 0, 0, 0, 121, 0, 0], 0),
+        [[123, 121], 10]
       );
     });
   });
@@ -158,109 +158,40 @@ describe('talking to the bridge', function() {
   });
 });
 
-describe('scheduler', function() {
-  it('sends a message on tick', function() {
-    let receivedMessage;
-    let s = scheduler({
-      write: function(data) {
-        receivedMessage = data;
-      },
-      writable: () => true
-    });
-
-    s.send({id: 0, data: [1, 2, 3]});
-    assert.deepEqual(receivedMessage, undefined);
-    s.tick();
-    assert.deepEqual(receivedMessage, [1, 0, 4, 0, 1, 2, 3]);
-  });
-
-  it('doesnt send a message twice', function() {
-    let timesCalled = 0;
-    let s = scheduler({
-      write: function(data) {
-        timesCalled += 1;
-      },
-      writable: () => true
-    });
-
-    s.send({id: 0, data: [1, 2, 3]});
-    assert.equal(timesCalled, 0);
-    s.tick();
-    assert.equal(timesCalled, 1);
-    s.tick();
-    assert.equal(timesCalled, 1);
-  });
-
-  it('doesnt write if writable is false', function() {
-    let timesCalled = 0;
-    let s = scheduler({
-      write: function(data) {
-        timesCalled += 1;
-      },
-      writable: () => false
-    });
-
-    s.send({id: 0, data: [1, 2, 3]});
-    assert.equal(timesCalled, 0);
-    s.tick();
-    assert.equal(timesCalled, 0);
-    s.tick();
-    assert.equal(timesCalled, 0);
-  });
-
-  it('batches together messages', function() {
-    let receivedMessage;
-    let s = scheduler({
-      write: function(data) {
-        receivedMessage = data;
-      },
-      writable: () => true
-    });
-
-    s.send({id: 0, data: [1, 2, 3]});
-    s.send({id: 1, data: [4, 5, 6]});
-    s.tick();
-    assert.deepEqual(receivedMessage, [1, 0, 4, 0, 1, 2, 3, 1, 0, 4, 1, 4, 5, 6]);
-  });
-
-  it('breaks up real big messages over multiple messages', function() {
-    let realBigMessage = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let receivedMessages = [];
-    let s = scheduler({
-      write: function(data) {
-        receivedMessages.push(data);
-      },
-      writable: () => true,
-      usableBufferSize: 10
-    });
-
-    s.send({id: 0, data: realBigMessage});
-    s.tick();
-    s.tick();
-    assert.deepEqual(
-      receivedMessages,
-      [[1, 0, 11, 0, 1, 2, 3, 4, 5, 6],
-       [7, 8, 9, 10]]
-    );
-  });
-});
-
 describe('reader', function() {
-  it('turns a stream of buffers into a stream of messages', function() {
+
+  // so we can easily set the buffer values without reassigning it
+  function setTo(buffer, values) {
+    while (buffer.length) { buffer.pop(); }
+    values.forEach(v => buffer.push(v));
+  }
+
+  function setUpTestReader() {
     let buffer = [];
-    let reader = makeReader({
-      check: () => buffer,
-      consume: () => {},
-      subscribe: () => {},
+    let tick;
+    let subscribed;
+    let reader = _makeReader({
+      gpio: buffer,
+      subscribe: t => { tick = t; }
     });
     let messages = [];
     reader(function(message) {
       messages.push(message);
     });
-    buffer = [1, 1, 0, 5, 1, 2];
-    reader.tick();
-    buffer = [1, 3, 4, 5, 6];
-    reader.tick();
+    return {
+      write: data => setTo(buffer, data),
+      tick,
+      messages,
+      buffer
+    };
+  }
+
+  it('turns a stream of buffers into a stream of messages', function() {
+    let { write, tick, messages } = setUpTestReader();
+    write([1, 1, 0, 5, 1, 2]);
+    tick();
+    write([1, 3, 4, 5, 6]);
+    tick();
     assert.deepEqual(
       messages,
       [[1, 2, 3, 4, 5]]
@@ -268,88 +199,45 @@ describe('reader', function() {
   });
 
   it('ignores 0s between messages', function() {
-    let buffer = [];
-    let reader = makeReader({
-      check: () => buffer,
-      consume: () => {},
-      subscribe: () => {},
-    });
-    let messages = [];
-    reader(function(message) {
-      messages.push(message);
-    });
-    buffer = [1, 1, 0, 5, 1, 2];
-    reader.tick();
-    buffer = [1, 3, 4, 5, 0, 0, 0, 0, 1, 0, 1, 1];
-    reader.tick();
-    assert.deepEqual(
-      messages,
-      [[1, 2, 3, 4, 5], [1]]
-    );
+    let { write, tick, messages } = setUpTestReader();
+    write([1, 1, 0, 5, 1, 2]);
+    tick();
+    write([1, 3, 4, 5, 0, 0, 0, 0, 1, 0, 1, 1]);
+    tick();
+    assert.deepEqual(messages, [[1, 2, 3, 4, 5], [1]]);
   });
 
   it('doesnt read if the read bit isnt set appropriately', function() {
-    let buffer = [];
-    let reader = makeReader({
-      check: () => buffer,
-      consume: () => {},
-      subscribe: () => {},
-    });
-    let messages = [];
-    reader(function(message) {
-      messages.push(message);
-    });
-    buffer = [1, 1, 0, 5, 1, 2];
-    reader.tick();
-    buffer = [0, 3, 4, 5, 6];
-    reader.tick();
-    assert.deepEqual(
-      messages,
-      []
-    );
+    let { write, tick, messages } = setUpTestReader();
+    write([1, 1, 0, 5, 1, 2]);
+    tick();
+    write([0, 3, 4, 5, 6]);
+    tick();
+    assert.deepEqual(messages, []);
   });
   
   it('doesnt read if the writer bit isnt set appropriately', function() {
-    let buffer = [];
-    let reader = makeReader({
-      check: () => buffer,
-      consume: () => {},
-      subscribe: () => {},
-    });
-    let messages = [];
-    reader(function(message) {
-      messages.push(message);
-    });
-    buffer = [1, 1, 0, 5, 1, 2];
-    reader.tick();
-    buffer = [3, 3, 4, 5, 6];
-    reader.tick();
-    assert.deepEqual(
-      messages,
-      []
-    );
+    let { write, tick, messages } = setUpTestReader();
+    write([1, 1, 0, 5, 1, 2]);
+    tick();
+    write([3, 3, 4, 5, 6]);
+    tick();
+    assert.deepEqual(messages, []);
   });
 
-  it('calls the consume function after consuming a message', function() {
-    let buffer = [];
-    let consumed = false;
-    let reader = makeReader({
-      check: () => buffer,
-      consume: () => { consumed = true; },
-      subscribe: () => {},
-    });
-    reader(function() { });
-    buffer = [1, 1, 0, 5, 1, 2];
-    reader.tick();
-    assert(consumed);
+  it('sets the buffer header after consuming the message', function() {
+    let { write, tick, buffer } = setUpTestReader();
+    write([1, 1, 0, 5, 1, 2]);
+    assert.equal(buffer[0], 1);
+    tick();
+    assert.equal(buffer[0], 0);
   });
 
   it('doesnt start listening until it has listeners', function() {
     let buffer = [];
     let subscribed = false;
-    let reader = makeReader({
-      check: () => buffer,
-      consume: () => {},
+    let reader = _makeReader({
+      gpio: buffer,
       subscribe: () => { subscribed = true; },
     });
     assert(!subscribed);
@@ -360,9 +248,8 @@ describe('reader', function() {
   it('cancels the subscription when there are no listeners', function() {
     let buffer = [];
     let subscribed = false;
-    let reader = makeReader({
-      check: () => buffer,
-      consume: () => {},
+    let reader = _makeReader({
+      gpio: buffer,
       subscribe: () => {
         subscribed = true;
         return () => subscribed = false;

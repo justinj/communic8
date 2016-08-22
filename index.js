@@ -1,30 +1,36 @@
+(typeof window !== 'undefined' ? window : global).pico8_gpio = new Array(128).fill(0);
+
 export function RPC({ id, input, output }) {
-  let createInvocation;
-  createInvocation = function(...args) {
-    return {
-      data: [id].concat(...args.map((a, i) => input[i].serialize(a))),
-      rpc: createInvocation
-    }
-  }
-  createInvocation.deserializeResult = function(data) {
+  function deserializer(data) {
     let result = [];
-    output.map(argument => {
+    let at = 0
+    output.forEach(argument => {
       let next;
-      [next, data] = argument.deserialize(data);
+      [next, at] = argument.deserialize(data, at);
       result.push(next);
     });
     return [result, data];
   }
-  return createInvocation;
+
+  return function(...args) {
+    return {
+      data: [id].concat(...args.map((a, i) => input[i].serialize(a))),
+      deserializer
+    }
+  }
 }
 
+// An argument datatype is a combination of a serializer and a deserializer.
+// The serializer takes the value and returns an array of bytes representing the value.
+// The deserializer takes an array of bytes and a position to deserialize from, and returns
+// a pair of (the deserialized value, the index of the first byte not consumed)
 export const ArgTypes = {
   Byte: {
     serialize(n) {
       return [n];
     },
-    deserialize([n, ...rest]) {
-      return [n, rest];
+    deserialize(input, at) {
+      return [input[at], at + 1];
     }
   },
   // PICO-8 Numbers are 16-bit 2's complement fixed point numbers, with the leading 8 bits
@@ -45,14 +51,15 @@ export const ArgTypes = {
         Math.floor((fractional * 256 * 256) % 256)
       ];
     },
-    deserialize([a, b, c, d, ...rest]) {
+    deserialize(input, at) {
+      let [a, b, c, d] = [input[at], input[at + 1], input[at + 2], input[at + 3]];
       let neg = (a & Math.pow(2, 7)) !== 0;
       let negativeAmt = 0;
       if (neg) {
-        a = a & (~Math.pow(2, 7));
+        a &= (~Math.pow(2, 7));
         negativeAmt = -32768;
       }
-      return [a * 256 + b + c / 256 + d / (256 * 256) + negativeAmt, rest];
+      return [a * 256 + b + c / 256 + d / (256 * 256) + negativeAmt, at + 4];
     }
   },
   Array: function(type) {
@@ -60,64 +67,66 @@ export const ArgTypes = {
       serialize(values) {
         return [Math.floor(values.length / 256), values.length % 256].concat(...values.map(type.serialize));
       },
-      deserialize([len1, len2, ...values]) {
-        let length = len1 * 256 + len2;
+      deserialize(input, at) {
+        let length = input[at] * 256 + input[at + 1];
+        at += 2;
         let result = [];
         for (let i = 0; i < length; i++) {
           let next;
-          [next, values] = type.deserialize(values);
+          [next, at] = type.deserialize(input, at);
           result.push(next);
         }
-
-        return [result, values];
+        return [result, at];
       }
     }
   },
 };
 
-let listeners = [];
+const UNCONSUMED            = 1 << 0
+const WRITTEN_BY_JAVASCRIPT = 1 << 1;
 
-let theScheduler = scheduler({
-  write: function(data) {
-    window.pico8_gpio.fill(0);
-    window.pico8_gpio[0] = 3;
-    for (let i = 0; i < data.length; i++) {
-      window.pico8_gpio[i + 1] = data[i];
-    }
-  },
-  writable: () => {
-    return !(window.pico8_gpio[0] & 2);j
-  }
-});
+const HEADER = 1;
+const USABLE_GPIO_SPACE = 127;
+
+let writeQueue = [];
+
 function defaultWriter(id, data) {
-  theScheduler.send({ id, data });
+  let length = data.length + 1; // + 1 for id
+  let message = [HEADER, Math.floor(length / 256), length % 256, id, ...data];
+  writeQueue.push(...message);
 }
 
-function poll() {
-  for (let i = 0; i < listeners.length; i++) {
-    listeners[i]();
-  }
-  theScheduler.tick();
-  if (polling) {
-    requestAnimationFrame(poll);
-  }
-}
-
-let polling = false;
-function startPolling() {
-  if (polling) return;
-  polling = true;
-  requestAnimationFrame(poll);
-}
-
-export function makeReader({ check, consume, subscribe }) {
+export function _makeReader({ gpio, subscribe }) {
   let listeners = [];
   let subscription;
-  let reader;
-  reader = function(cb) {
-    if (listeners.length === 0) {
-      subscription = subscribe(reader.tick);
+
+  let processByte = (function*() {
+    while (true) {
+      // get to the header byte...
+      while ((yield) === 0) {}
+      let length = (yield);
+      length = length * 256 + (yield);
+      let next = [];
+      for (let i = 0; i < length; i++) {
+        next.push(yield);
+      }
+      listeners.forEach(l => l(next));
     }
+  })();
+  processByte.next();
+
+  function tick() {
+    if ((gpio[0] & UNCONSUMED) && !(gpio[0] & WRITTEN_BY_JAVASCRIPT)) {
+      gpio.slice(1).forEach(b => processByte.next(b));
+      gpio[0] &= ~UNCONSUMED;
+    }
+  }
+
+  return function(cb) {
+    if (listeners.length === 0) {
+      subscription = subscribe(tick);
+    }
+
     listeners.push(cb);
 
     return function() {
@@ -128,52 +137,46 @@ export function makeReader({ check, consume, subscribe }) {
       }
     }
   };
-
-  function *receive() {
-    while (true) {
-      // get to the header bit...
-      while ((yield) === 0) {}
-      let length = (yield);
-      length = length * 256 + (yield);
-      let next = [];
-      for (let i = 0; i < length; i++) {
-        next.push(yield);
-      }
-      listeners.forEach(l => l(next));
-    }
-  }
-
-  let receiver = receive();
-  receiver.next();
-  reader.tick = function() {
-    let ary = check();
-    if ((ary[0] & 1) && !(ary[0] & 2)) {
-      ary.slice(1).forEach(b => receiver.next(b));
-      consume();
-    }
-  }
-
-  return reader;
 }
 
+let polling = false;
+function startPolling() {
+  if (polling) return;
+  polling = true;
+  requestAnimationFrame(poll);
+}
 
-let unsub;
-let reader = makeReader({
-  check: () => pico8_gpio,
-  consume: () => { pico8_gpio[0] &= ~1; },
+let readerPollingListener = null;
+
+let reader = _makeReader({
+  gpio: pico8_gpio,
   subscribe: (tick) => {
-    unsub = listeners.push(tick);
-    startPolling(tick);
-  },
-  unsubscribe: () => {
-    unsub();
+    readerPollingListener = tick;
+    startPolling();
+    return () => {
+      polling = false;
+      readerPollingListener = null;
+    }
   }
 });
 
+function poll() {
+  if (!polling) {
+    return;
+  }
+  readerPollingListener();
+  if (writeQueue.length > 0 && isGPIOWritable()) {
+    writeToGPIO(writeQueue.splice(0, USABLE_GPIO_SPACE));
+  }
+  requestAnimationFrame(poll);
+}
+
 export function connect(args={ reader, writer: defaultWriter }) {
-  (typeof window !== 'undefined' ? window : global).pico8_gpio = new Array(128).fill(0);
   let reader = args.reader;
-  let writer = args.writer;
+
+  let pendingInvocations = {};
+  let nextId = 0;
+
   let subscription = reader(function(data) {
     let [id, ...contents] = data;
     if (!pendingInvocations.hasOwnProperty(id)) {
@@ -181,22 +184,19 @@ export function connect(args={ reader, writer: defaultWriter }) {
     }
     let invocation = pendingInvocations[id];
     delete pendingInvocations[id];
-    invocation.resolve(invocation.rpc.deserializeResult(contents)[0]);
+    invocation.resolve(invocation.deserializer(contents)[0]);
   });
 
-  let pendingInvocations = {};
-  let nextId = 0;
-
   return {
-    send: function({ rpc, data }) {
+    send: function({ deserializer, data }) {
       return new Promise(function(resolve, reject) {
         while (pendingInvocations.hasOwnProperty(nextId)) {
           // need to update this to be fancier sometime
           nextId = (nextId + 1) % 256;
         }
         let id = nextId;
-        writer(id, data);
-        pendingInvocations[id] = { resolve, reject, id, rpc };
+        args.writer(id, data);
+        pendingInvocations[id] = { resolve, id, deserializer };
       });
     },
     stop: function() {
@@ -206,22 +206,14 @@ export function connect(args={ reader, writer: defaultWriter }) {
   };
 }
 
-function encode({ id, data }) {
-  let length = data.length + 1; // + 1 for id
-  return [1, Math.floor(length / 256), length % 256, id, ...data];
+function writeToGPIO(data) {
+  window.pico8_gpio.fill(0);
+  window.pico8_gpio[0] = WRITTEN_BY_JAVASCRIPT | UNCONSUMED;
+  for (let i = 0; i < data.length; i++) {
+    window.pico8_gpio[i + 1] = data[i];
+  }
 }
 
-export function scheduler({ write, writable, usableBufferSize=127 }) {
-  let writeQueue = [];
-
-  return {
-    send: function(message) {
-      writeQueue.push(...encode(message));
-    },
-    tick: function() {
-      if (writeQueue.length > 0 && writable()) {
-        write(writeQueue.splice(0, usableBufferSize));
-      }
-    }
-  };
+function isGPIOWritable() {
+  return !(window.pico8_gpio[0] & UNCONSUMED);
 }
