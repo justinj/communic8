@@ -1,28 +1,21 @@
-//import 'babel-polyfill';
-
-const BUFFER_SIZE = 128;
-// we always reserve a header byte
-const USABLE_BUFFER_SIZE = 127;
-
-export function RPC(spec) {
-  let serialize;
-  serialize = function(...args) {
+export function RPC({ id, input, output }) {
+  let createInvocation;
+  createInvocation = function(...args) {
     return {
-      data: [spec.id].concat(...args.map((a, i) => spec.args[i].serialize(a))),
-      rpc: serialize
+      data: [id].concat(...args.map((a, i) => input[i].serialize(a))),
+      rpc: createInvocation
     }
   }
-  // sort of ugly? but we want the function syntax for end-users
-  serialize.deserializeResult = function(data) {
+  createInvocation.deserializeResult = function(data) {
     let result = [];
-    for (let i = 0; i < spec.ret.length; i++) {
+    output.map(argument => {
       let next;
-      [next, data] = spec.ret[i].deserialize(data);
+      [next, data] = argument.deserialize(data);
       result.push(next);
-    }
+    });
     return [result, data];
   }
-  return serialize;
+  return createInvocation;
 }
 
 export const ArgTypes = {
@@ -34,6 +27,8 @@ export const ArgTypes = {
       return [n, rest];
     }
   },
+  // PICO-8 Numbers are 16-bit 2's complement fixed point numbers, with the leading 8 bits
+  // representing whole numbers and the trailing 8 bits representing fractional numbers
   Number: {
     serialize(n) {
       let integral = Math.floor(n);

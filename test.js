@@ -9,11 +9,11 @@ function andThen(fn) {
 
 let add = RPC({
   id: 0, // a unique byte to identify the RPC
-  args: [
+  input: [
     ArgTypes.Byte,
     ArgTypes.Byte
   ],
-  ret: [
+  output: [
     ArgTypes.Byte
   ]
 });
