@@ -25,6 +25,14 @@ export function RPC({ id, input, output }) {
 // The deserializer takes an array of bytes and a position to deserialize from, and returns
 // a pair of (the deserialized value, the index of the first byte not consumed)
 export const ArgTypes = {
+  Boolean: {
+    serialize(b) {
+      return [b ? 1 : 0];
+    },
+    deserialize(input, at) {
+      return [input[at] !== 0, at + 1];
+    }
+  },
   Byte: {
     serialize(n) {
       return [n];
@@ -78,8 +86,24 @@ export const ArgTypes = {
         }
         return [result, at];
       }
-    }
+    };
   },
+  Tuple: function(...ts) {
+    return {
+      serialize(values) {
+        return [].concat(...ts.map((t, i) => t.serialize(values[i])));
+      },
+      deserialize(ary, at) {
+        let result = [];
+        ts.forEach(t => {
+          let next;
+          [next, at] = t.deserialize(ary, at);
+          result.push(next);
+        });
+        return [result, at];
+      }
+    };
+  }
 };
 
 const UNCONSUMED            = 1 << 0

@@ -83,6 +83,26 @@ describe('encodings', function() {
       );
     });
   });
+
+  describe('Tuple', function() {
+    let single = ArgTypes.Tuple(ArgTypes.Byte);
+    it('encodes a tuple of a single type', function() {
+      assert.deepEqual(single.serialize([0]), [0]);
+    });
+
+    it('decodes a tuple of a single type', function() {
+      assert.deepEqual(single.deserialize([0], 0), [[0], 1]);
+    });
+
+    let pair = ArgTypes.Tuple(ArgTypes.Byte, ArgTypes.Boolean);
+    it('encodes a tuple of a pair', function() {
+      assert.deepEqual(pair.serialize([0, true]), [0, 1]);
+    });
+
+    it('decodes a tuple of a pair', function() {
+      assert.deepEqual(pair.deserialize([10, 1], 0), [[10, true], 2]);
+    });
+  });
 });
 
 function makeMock({ messagesBeforeRespond }={ messagesBeforeRespond: 1 }) {
