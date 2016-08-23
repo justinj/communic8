@@ -106,7 +106,7 @@ export const ArgTypes = {
   }
 };
 
-const UNCONSUMED            = 1 << 0
+const READY_FOR_CONSUMPTION = 1 << 0
 const WRITTEN_BY_JAVASCRIPT = 1 << 1;
 
 const HEADER = 1;
@@ -122,7 +122,6 @@ function defaultWriter(id, data) {
 
 export function _makeReader({ gpio, subscribe }) {
   let listeners = [];
-  let subscription;
 
   let processByte = (function*() {
     while (true) {
@@ -130,29 +129,28 @@ export function _makeReader({ gpio, subscribe }) {
       while ((yield) === 0) {}
       let length = (yield);
       length = length * 256 + (yield);
-      let next = [];
+      let nextMessage = new Array(length);
       for (let i = 0; i < length; i++) {
-        next.push(yield);
+        nextMessage[i] = (yield);
       }
-      listeners.forEach(l => l(next));
+      listeners.forEach(l => l(nextMessage));
     }
   })();
   processByte.next();
 
   function tick() {
-    if ((gpio[0] & UNCONSUMED) && !(gpio[0] & WRITTEN_BY_JAVASCRIPT)) {
+    if ((gpio[0] & READY_FOR_CONSUMPTION) && !(gpio[0] & WRITTEN_BY_JAVASCRIPT)) {
       gpio.slice(1).forEach(b => processByte.next(b));
-      gpio[0] &= ~UNCONSUMED;
+      gpio[0] &= ~READY_FOR_CONSUMPTION;
     }
   }
 
+  let subscription;
   return function(cb) {
     if (listeners.length === 0) {
       subscription = subscribe(tick);
     }
-
     listeners.push(cb);
-
     return function() {
       listeners = listeners.filter(l => l !== cb);
       if (listeners.length === 0 && subscription) {
@@ -163,24 +161,28 @@ export function _makeReader({ gpio, subscribe }) {
   };
 }
 
+let readerPollingListener = null;
 let polling = false;
-function startPolling() {
-  if (polling) return;
+
+function startPolling(listener) {
+  if (polling) {
+    throw new Error("Trying to start polling when already polling");
+  }
+  readerPollingListener = listener;
   polling = true;
   requestAnimationFrame(poll);
 }
 
-let readerPollingListener = null;
+function stopPolling() {
+  readerPollingListener = null;
+  polling = false;
+}
 
 let reader = _makeReader({
   gpio: pico8_gpio,
   subscribe: (tick) => {
-    readerPollingListener = tick;
-    startPolling();
-    return () => {
-      polling = false;
-      readerPollingListener = null;
-    }
+    startPolling(tick);
+    return stopPolling;
   }
 });
 
@@ -232,12 +234,12 @@ export function connect(args={ reader, writer: defaultWriter }) {
 
 function writeToGPIO(data) {
   window.pico8_gpio.fill(0);
-  window.pico8_gpio[0] = WRITTEN_BY_JAVASCRIPT | UNCONSUMED;
+  window.pico8_gpio[0] = WRITTEN_BY_JAVASCRIPT | READY_FOR_CONSUMPTION;
   for (let i = 0; i < data.length; i++) {
     window.pico8_gpio[i + 1] = data[i];
   }
 }
 
 function isGPIOWritable() {
-  return !(window.pico8_gpio[0] & UNCONSUMED);
+  return !(window.pico8_gpio[0] & READY_FOR_CONSUMPTION);
 }
