@@ -83,8 +83,10 @@ const Byte = {
   serialize(n) {
     return [n];
   },
-  deserialize([n, ...rest]) {
-    return [n, rest];
+  // returns a pair of the deserialized value and the position to continue
+  // deserializing from
+  deserialize(data, at) {
+    return [data[at], at + 1];
   }
 };
 
