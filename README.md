@@ -153,11 +153,13 @@ Remarks:
 
 1 byte at the beginning of the 128-byte space is reserved as a header to indicate
 
-* who wrote the current message and
-* whether the current message has been consumed or not.
+* who wrote the current value of the gpio pins
+* whether the current value of the gpio pins has been consumed or not.
 
 The writer sets both of these values upon writing, and then the consumer marks
-the message as consumed after consuming it.
+the pins as consumed after consuming it.
+There could be multiple messages in one filling of the GPIO pins, and there could be a message spread out over multiple.
+The GPIO pins should be thought of more as a continuous stream of bytes.
 
 
 ### Benefits of this approach
