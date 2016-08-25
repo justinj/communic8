@@ -70,7 +70,7 @@ let bridge = connect();
 We then send an *invocation* of the message over the wire by using `bridge.send`, which returns a promise for the result:
 
 ```javascript
-bridge.send(add(2, 3)).then(sum => {
+bridge.send(add(2, 3)).then(([sum]) => {
   console.log('2 + 3 =', sum);
 });
 ```
@@ -131,6 +131,8 @@ A tuple of the given types.
 For instance, `Tuple(Byte, Boolean, Number)` would represent values like `[123, true, -45.24]`.
 
 ##Low-Level Protocol
+
+Note: I know nothing about networking/protocols
 
 A message is:
 
