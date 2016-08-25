@@ -5,6 +5,7 @@ export function RPC({ id, input, output }) {
     let result = [];
     let at = 0
     output.forEach(argument => {
+      // it annoys me that `at` here is already defined so I can't just `let [next, at] ...`
       let next;
       [next, at] = argument.deserialize(data, at);
       result.push(next);
@@ -24,6 +25,12 @@ export function RPC({ id, input, output }) {
 // The serializer takes the value and returns an array of bytes representing the value.
 // The deserializer takes an array of bytes and a position to deserialize from, and returns
 // a pair of (the deserialized value, the index of the first byte not consumed)
+// the idea here was to set up a bunch of base-level datatypes which can later
+// be combined with combinators to create new ones without caring about the
+// actual way they work
+// another one I'd like to have is a Record/NamedTuple datatype (that would
+// deserialize to an object in JS and a table in Lua) but I'm not completely
+// sure how I want to handle it yet
 export const ArgTypes = {
   Boolean: {
     serialize(b) {
@@ -105,6 +112,8 @@ export const ArgTypes = {
     };
   },
   // this lets a type pretend to be an Opaque, which is equivalent to Array(Byte).
+  // I don't like the name Opaque/Opacify for this but I'm struggling to think
+  // of anything better :(
   Opacify: function(t) {
     return {
       serialize(values) {
@@ -126,6 +135,7 @@ const WRITTEN_BY_JAVASCRIPT = 1 << 1;
 const HEADER = 1;
 const USABLE_GPIO_SPACE = 127;
 
+// this is generalized and exported only so it can be tested
 export function _makeReader({ gpio, subscribe }) {
   let listener;
 
@@ -170,6 +180,12 @@ export function _makeReader({ gpio, subscribe }) {
     };
   };
 }
+//
+// there's a lot of global/stateful stuff going on in this module, but I think
+// that's more or less unavoidable since we're inherently communicating with a
+// global/stateful array.
+// I do think it could be maybe handled/controlled a little more cleanly than
+// it is here though...
 
 let readerPollingListener = null;
 let polling = false;
@@ -183,9 +199,6 @@ function startPolling(listener) {
   requestAnimationFrame(poll);
 }
 
-// there's a lot of global/stateful stuff going on in this module, but I think
-// that's more or less unavoidable since we're inherently communicating with a
-// global/stateful array
 let writeQueue = [];
 function writer(data) {
   writeQueue.push(HEADER, Math.floor(data.length / 256), data.length % 256, ...data);
@@ -211,6 +224,10 @@ function writeToGPIOIfPossible() {
 
 function poll() {
   if (polling) {
+    // This polling loop feels a little weird to me since readerPollingListener
+    // is set dynamically and writeToGPIOIfPossible is static, I think maybe if
+    // we just keep polling while the writeQueue is nonempty it might feel a
+    // little better but I'm unsure
     readerPollingListener();
     writeToGPIOIfPossible();
     requestAnimationFrame(poll);
@@ -230,7 +247,10 @@ let reader = _makeReader({
   }
 });
 
+// I would have thought you could just inline this but I guess my understanding
+// of ES6 default args/destructuring is lacking
 let defaultReaderWriter = { reader, writer };
+
 export function connect({ reader, writer }=defaultReaderWriter) {
   let pendingInvocations = {};
   let subscription = reader(function(data) {

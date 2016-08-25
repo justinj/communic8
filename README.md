@@ -1,3 +1,5 @@
+#do not use me yet (and I'm not on npm yet anyway)
+
 The PICO-8 GPIO pins allow us to communicate in 128-bit chunks.
 
 The first 8 bits are reserved as a header, the remaining 120 are the message.
@@ -7,7 +9,7 @@ The first 8 bits are reserved as a header, the remaining 120 are the message.
 ```javascript
 let bridge = connect();
 
-// this starts a polling loop which will eat up CPU cyclces, so if you no longer need it, stop it:
+// this starts a polling loop which will eat up CPU cycles, so if you no longer need it, stop it:
 bridge.stop();
 ```
 
