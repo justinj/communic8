@@ -9,7 +9,7 @@ export function RPC({ id, input, output }) {
       [next, at] = argument.deserialize(data, at);
       result.push(next);
     });
-    return [result, data];
+    return result;
   }
 
   return function(...args) {
@@ -64,7 +64,7 @@ export const ArgTypes = {
       let neg = (a & Math.pow(2, 7)) !== 0;
       let negativeAmt = 0;
       if (neg) {
-        a &= (~Math.pow(2, 7));
+        a &= ~Math.pow(2, 7);
         negativeAmt = -32768;
       }
       return [a * 256 + b + c / 256 + d / (256 * 256) + negativeAmt, at + 4];
@@ -103,8 +103,22 @@ export const ArgTypes = {
         return [result, at];
       }
     };
+  },
+  // this lets a type pretend to be an Opaque, which is equivalent to Array(Byte).
+  Opacify: function(t) {
+    return {
+      serialize(values) {
+        let serialized = t.serialize(values);
+        return [Math.floor(serialized.length / 256), serialized.length % 256, ...serialized];
+      },
+      deserialize(ary, at) {
+        return t.deserialize(ary, at + 2);
+      }
+    }
   }
 };
+
+ArgTypes.Opaque = ArgTypes.Array(ArgTypes.Byte);
 
 const READY_FOR_CONSUMPTION = 1 << 0
 const WRITTEN_BY_JAVASCRIPT = 1 << 1;
@@ -112,16 +126,8 @@ const WRITTEN_BY_JAVASCRIPT = 1 << 1;
 const HEADER = 1;
 const USABLE_GPIO_SPACE = 127;
 
-let writeQueue = [];
-
-function defaultWriter(id, data) {
-  let length = data.length + 1; // + 1 for id
-  let message = [HEADER, Math.floor(length / 256), length % 256, id, ...data];
-  writeQueue.push(...message);
-}
-
 export function _makeReader({ gpio, subscribe }) {
-  let listeners = [];
+  let listener;
 
   let processByte = (function*() {
     while (true) {
@@ -133,7 +139,9 @@ export function _makeReader({ gpio, subscribe }) {
       for (let i = 0; i < length; i++) {
         nextMessage[i] = (yield);
       }
-      listeners.forEach(l => l(nextMessage));
+      if (listener) {
+        listener(nextMessage);
+      }
     }
   })();
   processByte.next();
@@ -145,19 +153,21 @@ export function _makeReader({ gpio, subscribe }) {
     }
   }
 
-  let subscription;
   return function(cb) {
-    if (listeners.length === 0) {
-      subscription = subscribe(tick);
+    // in theory, we can support multiple clients at once, although due to
+    // the global nature of communication through pico8_gpio, I think that
+    // might cause problems in some situations?  regardless, I don't see a
+    // strong use-case for multiple connect() calls so for now I'm going to
+    // disallow it.
+    if (listener) {
+      throw new Error("Don't make a new call to connect() without stop()ping the old one");
     }
-    listeners.push(cb);
+    listener = cb;
+    let subscription = subscribe(tick);
     return function() {
-      listeners = listeners.filter(l => l !== cb);
-      if (listeners.length === 0 && subscription) {
-        subscription();
-        subscription = null;
-      }
-    }
+      subscription();
+      listener = null;
+    };
   };
 }
 
@@ -173,6 +183,40 @@ function startPolling(listener) {
   requestAnimationFrame(poll);
 }
 
+// there's a lot of global/stateful stuff going on in this module, but I think
+// that's more or less unavoidable since we're inherently communicating with a
+// global/stateful array
+let writeQueue = [];
+function writer(data) {
+  writeQueue.push(HEADER, Math.floor(data.length / 256), data.length % 256, ...data);
+}
+
+function writeToGPIO(data) {
+  pico8_gpio.fill(0);
+  pico8_gpio[0] = WRITTEN_BY_JAVASCRIPT | READY_FOR_CONSUMPTION;
+  for (let i = 0; i < data.length; i++) {
+    pico8_gpio[i + 1] = data[i];
+  }
+}
+
+function isGPIOWritable() {
+  return !(pico8_gpio[0] & READY_FOR_CONSUMPTION);
+}
+
+function writeToGPIOIfPossible() {
+  if (writeQueue.length > 0 && isGPIOWritable()) {
+    writeToGPIO(writeQueue.splice(0, USABLE_GPIO_SPACE));
+  }
+}
+
+function poll() {
+  if (polling) {
+    readerPollingListener();
+    writeToGPIOIfPossible();
+    requestAnimationFrame(poll);
+  }
+}
+
 function stopPolling() {
   readerPollingListener = null;
   polling = false;
@@ -180,29 +224,15 @@ function stopPolling() {
 
 let reader = _makeReader({
   gpio: pico8_gpio,
-  subscribe: (tick) => {
+  subscribe: tick => {
     startPolling(tick);
     return stopPolling;
   }
 });
 
-function poll() {
-  if (!polling) {
-    return;
-  }
-  readerPollingListener();
-  if (writeQueue.length > 0 && isGPIOWritable()) {
-    writeToGPIO(writeQueue.splice(0, USABLE_GPIO_SPACE));
-  }
-  requestAnimationFrame(poll);
-}
-
-export function connect(args={ reader, writer: defaultWriter }) {
-  let reader = args.reader;
-
+let defaultReaderWriter = { reader, writer };
+export function connect({ reader, writer }=defaultReaderWriter) {
   let pendingInvocations = {};
-  let nextId = 0;
-
   let subscription = reader(function(data) {
     let [id, ...contents] = data;
     if (!pendingInvocations.hasOwnProperty(id)) {
@@ -210,19 +240,18 @@ export function connect(args={ reader, writer: defaultWriter }) {
     }
     let invocation = pendingInvocations[id];
     delete pendingInvocations[id];
-    invocation.resolve(invocation.deserializer(contents)[0]);
+    invocation.resolve(invocation.deserializer(contents));
   });
 
+  let nextId = 0;
   return {
     send: function({ deserializer, data }) {
       return new Promise(function(resolve, reject) {
         while (pendingInvocations.hasOwnProperty(nextId)) {
-          // need to update this to be fancier sometime
           nextId = (nextId + 1) % 256;
         }
-        let id = nextId;
-        args.writer(id, data);
-        pendingInvocations[id] = { resolve, id, deserializer };
+        writer([nextId, ...data]);
+        pendingInvocations[nextId] = { resolve, deserializer };
       });
     },
     stop: function() {
@@ -230,16 +259,4 @@ export function connect(args={ reader, writer: defaultWriter }) {
       subscription();
     }
   };
-}
-
-function writeToGPIO(data) {
-  window.pico8_gpio.fill(0);
-  window.pico8_gpio[0] = WRITTEN_BY_JAVASCRIPT | READY_FOR_CONSUMPTION;
-  for (let i = 0; i < data.length; i++) {
-    window.pico8_gpio[i + 1] = data[i];
-  }
-}
-
-function isGPIOWritable() {
-  return !(window.pico8_gpio[0] & READY_FOR_CONSUMPTION);
 }
