@@ -1,10 +1,6 @@
 #do not use me yet (and I'm not on npm yet anyway)
 
-The PICO-8 GPIO pins allow us to communicate in 128-bit chunks.
-
-The first 8 bits are reserved as a header, the remaining 120 are the message.
-
-## Creating a connection
+## Usage
 
 ```javascript
 let bridge = connect();
