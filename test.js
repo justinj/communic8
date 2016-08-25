@@ -282,3 +282,11 @@ describe('reader', function() {
     assert(!subscribed);
   });
 });
+
+describe('behaviour when calling stop() (on hold)', function() {
+  // I think these would be good to have, for my current purposes there's no
+  // reason to call stop so I think having this would unnecessarily complicate
+  // the implementation
+
+  it('waits for all the pending function calls to finish before actually stopping');
+});
