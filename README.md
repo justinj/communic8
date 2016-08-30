@@ -8,14 +8,6 @@ is mapped to a global JavaScript array, `pico8_gpio`.
 Both PICO-8 and JavaScript can read and write to this section, and both can
 poll reading it at 60fps.
 
-There's two important things to note about the system:
-
-1. Since JavaScript is single-threaded and the PICO-8 web player is still just
-   in JavaScript, we don't need to worry about any kind of concurrent access or
-   locking
-2. Message order is guaranteed, so we don't need to worry about providing an
-   order for the different pieces of a message.
-
 ##High-level API
 
 ###Defining Messages
@@ -153,6 +145,7 @@ Remarks:
 
 1 byte at the beginning of the 128-byte space is reserved as a header to indicate
 
+* whether the PICO-8 end is currently in the process of writing to the pins
 * who wrote the current value of the gpio pins
 * whether the current value of the gpio pins has been consumed or not.
 
