@@ -1,15 +1,5 @@
 #do not use me yet (and I'm not on npm yet anyway)
 
-##Requirements
-
-The setup is this:
-There's a 128-byte region of memory (`0x5f80` to `0x5fff`) within PICO-8 which
-is mapped to a global JavaScript array, `pico8_gpio`.
-Both PICO-8 and JavaScript can read and write to this section, and both can
-poll reading it at 60fps.
-
-##High-level API
-
 ###Defining Messages
 
 Message types must be defined on both the JavaScript and PICO-8 sides of the communication.
@@ -34,11 +24,11 @@ let add = RPC({
 ```lua
 functions[0] = { -- add, has id 0
 	 input={
-	   byte,
-	   byte
+	   arg_types.byte,
+	   arg_types.byte
 	 },
 	 output={
-	   byte
+	   arg_types.byte
 	 },
 	 execute=function(args)
 	 	 return {args[1] + args[2]}
@@ -48,7 +38,7 @@ functions[0] = { -- add, has id 0
 
 Return values are always arrays, to easily support multiple return values (though I'm thinking of changing this and only allowing singular values, and making return values require using a tuple instead).
 
-###Communicating
+###Communicating From JavaScript
 
 In JS-land we connect (start polling) and get an instance of the bridge:
 
@@ -67,6 +57,42 @@ bridge.send(add(2, 3)).then(([sum]) => {
 });
 ```
 
+###Communicating from PICO-8
+
+Include the stub in `index.p8` in your cart.
+There are two values exposed, `arg_types` and `init_communic8`.
+
+We have to tell communic8 how to handle the different messages we will receive from JavaScript, so we create a table indexed by the byte ids of the messages:
+
+```lua
+functions = {}
+functions[0] = { -- add, has id 0
+	 input={
+	   arg_types.byte,
+	   arg_types.byte
+	 },
+	 output={
+	   arg_types.byte
+	 },
+	 execute=function(args)
+	 	 return {args[1] + args[2]}
+	 end
+}
+```
+
+and then pass this table to `init_communic8`:
+```lua
+update_communic8 = init_communic8(functions)
+```
+
+and then call this in our `_update`:
+```lua
+function _update()
+  update_communic8()
+  ...
+end
+```
+
 ###Datatypes
 
 In JS-land, datatypes are implemented as objects with a `serialize` and `deserialize` pair of functions.
@@ -81,10 +107,10 @@ const Byte = {
     return [data[at], at + 1];
   }
 };
+```
 
 `serialize` returns an array of bytes representing the value.
 `deserialize` returns a pair of the value and the remaining bytes to be deserialized.
-```
 
 ####Base Types
 
@@ -125,6 +151,16 @@ A tuple of the given types.
 For instance, `Tuple(Byte, Boolean, Number)` would represent values like `[123, true, -45.24]`.
 
 ##Low-Level Protocol
+
+###Requirements
+
+The setup is this:
+There's a 128-byte region of memory (`0x5f80` to `0x5fff`) within PICO-8 which
+is mapped to a global JavaScript array, `pico8_gpio`.
+Both PICO-8 and JavaScript can read and write to this section, and both can
+poll reading it at 60fps.
+
+###Solution used here
 
 Note: I know nothing about networking/protocols
 
