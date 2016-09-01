@@ -181,13 +181,20 @@ function init_communic8(functions)
 
     if #write_queue > 0 and band(header, 1) == 0 then
       poke(header_location, pico8_lock)
+      local to_remove_from_write_queue = 0
       for i = 0, 126 do
-        if #write_queue > 0 then
-          poke(message_location + i, write_queue[1])
-          del(write_queue, write_queue[1])
+        if #write_queue - to_remove_from_write_queue > 0 then
+          poke(message_location + i, write_queue[1 + i])
+          to_remove_from_write_queue += 1
         else
           poke(message_location + i, 0)
         end
+      end
+      for i = 1, #write_queue - to_remove_from_write_queue do
+        write_queue[i] = write_queue[i + to_remove_from_write_queue]
+      end
+      for i = #write_queue - to_remove_from_write_queue + 1, #write_queue do
+        write_queue[i] = nil
       end
       poke(header_location, ready_for_consumption)
     end
