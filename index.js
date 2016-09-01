@@ -131,7 +131,7 @@ ArgTypes.Opaque = ArgTypes.Array(ArgTypes.Byte);
 
 const READY_FOR_CONSUMPTION = 1 << 0
 const WRITTEN_BY_JAVASCRIPT = 1 << 1;
-const CURRENTLY_WRITING     = 1 << 2;
+const PICO8_LOCK     = 1 << 2;
 
 const HEADER = 1;
 const USABLE_GPIO_SPACE = 127;
@@ -160,7 +160,7 @@ export function _makeReader({ gpio, subscribe }) {
   function tick() {
     if ((gpio[0] & READY_FOR_CONSUMPTION)
         && !(gpio[0] & WRITTEN_BY_JAVASCRIPT)
-        && !(gpio[0] & CURRENTLY_WRITING)) {
+        && !(gpio[0] & PICO8_LOCK)) {
       gpio.slice(1).forEach(b => processByte.next(b));
       gpio[0] &= ~READY_FOR_CONSUMPTION;
     }
@@ -216,7 +216,7 @@ function writeToGPIO(data) {
 }
 
 function isGPIOWritable() {
-  return !(pico8_gpio[0] & READY_FOR_CONSUMPTION) & !(pico8_gpio[0] & CURRENTLY_WRITING);
+  return !(pico8_gpio[0] & READY_FOR_CONSUMPTION) & !(pico8_gpio[0] & PICO8_LOCK);
 }
 
 function writeToGPIOIfPossible() {
