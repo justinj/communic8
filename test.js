@@ -84,6 +84,19 @@ describe('encodings', function() {
     });
   });
 
+  describe('String', function() {
+    it('encodes a string as an array of bytes', function() {
+      assert.deepEqual(ArgTypes.String.serialize('hello'), [0, 5, 104, 101, 108, 108, 111]);
+    });
+
+    it('decodes a string', function() {
+      assert.deepEqual(
+        ArgTypes.String.deserialize([0, 5, 104, 101, 108, 108, 111], 0),
+        ['hello', 7]
+      );
+    });
+  });
+
   describe('Tuple', function() {
     let single = ArgTypes.Tuple(ArgTypes.Byte);
     it('encodes a tuple of a single type', function() {

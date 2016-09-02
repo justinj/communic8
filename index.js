@@ -111,6 +111,23 @@ export const ArgTypes = {
       }
     };
   },
+  String: {
+    serialize(values) {
+      return [
+        Math.floor(values.length / 256), values.length % 256,
+        ...values.split('').map(c => c.charCodeAt(0))
+      ];
+    },
+    deserialize(ary, at) {
+      let length = ary[at] * 256 + ary[at + 1];
+      let result = '';
+      at += 2;
+      for (let i = 0; i < length; i++) {
+        result += String.fromCharCode(ary[at + i]);
+      }
+      return [result, at + length];
+    }
+  },
   // this lets a type pretend to be an Unspecified, which is equivalent to Array(Byte).
   Unspecify: function(t) {
     return {

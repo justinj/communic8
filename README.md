@@ -149,6 +149,10 @@ A single byte.
 A 32-bit fixed point PICO-8 number.
 2 bytes at the beginning represent the whole part of the number and 2 bytes at the end represent the fractional part.
 
+#####String
+
+A string of characters.
+
 #####Unspecified
 
 An unspecified stream of bytes.
@@ -218,3 +222,7 @@ the pins as consumed after consuming it.
 There could be multiple messages in one filling of the GPIO pins, and there could be a message spread out over multiple.
 The GPIO pins should be thought of more as a continuous stream of bytes.
 
+
+##Credit
+
+Thanks Sean LeBlanc for looking over the README and making some helpful suggestions.
