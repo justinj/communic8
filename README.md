@@ -9,7 +9,7 @@ reverse, as well.
 An example of an RPC that adds two bytes might look like this:
 
 ```javascript
-let add = RPC({
+var add = RPC({
   id: 0, // a unique byte to identify the RPC
   input: [
     ArgTypes.Byte,
@@ -23,16 +23,16 @@ let add = RPC({
 
 ```lua
 functions[0] = { -- add, has id 0
-	 input={
-	   arg_types.byte,
-	   arg_types.byte
-	 },
-	 output={
-	   arg_types.byte
-	 },
-	 execute=function(args)
-	 	 return {args[1] + args[2]}
-	 end
+  input={
+    arg_types.byte,
+    arg_types.byte
+  },
+  output={
+    arg_types.byte
+  },
+  execute=function(args)
+    return {args[1] + args[2]}
+  end
 }
 ```
 
@@ -43,19 +43,41 @@ Return values are always arrays, to easily support multiple return values (thoug
 In JS-land we connect (start polling) and get an instance of the bridge:
 
 ```javascript
-let bridge = connect();
+var bridge = connect();
 
 // we can disconnect (and stop polling) by calling
 // bridge.stop();
 ```
 
-We then send an *invocation* of the message over the wire by using `bridge.send`, which returns a promise for the result:
+We can create an *invocation* of our RPC by calling it as a function:
 
 ```javascript
-bridge.send(add(2, 3)).then(([sum]) => {
-  console.log('2 + 3 =', sum);
+var addInvocation = add(2, 3);
+```
+
+We can send this invocation into PICO-8 land and get a result by using `bridge.send`:
+
+```javascript
+var result = bridge.send(addInvocation);
+```
+
+However, since PICO-8 has to run in order to produce the result, the value isn't going to be ready immediately.
+Because of this, `bridge.send` actually returns a *promise* for the result.
+
+We can operate on the result once it's ready by using the promise's `.then` method:
+
+```javascript
+result.then(function(response) {
+  var sum = response[0]; // RPCs can return multiple values, so responses are always arrays
+  console.log('2 + 3 =', sum); // => "2 + 3 = 5"
 });
 ```
+
+If you're not familiar with promises, see
+[this](https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Promise)
+for more on them, or
+[this](http://robotlolita.me/2015/11/15/how-do-promises-work.html) for a
+*very* in-depth and *very* good read on them.
 
 ###Communicating from PICO-8
 
@@ -127,15 +149,15 @@ A single byte.
 A 32-bit fixed point PICO-8 number.
 2 bytes at the beginning represent the whole part of the number and 2 bytes at the end represent the fractional part.
 
-#####Opaque/Opacify
+#####Unspecified
 
 An unspecified stream of bytes.
 This is used when one end of the message shouldn't know anything about the format, for instance,
 if a game presents this datatype for dumps of its state, the state format can
 be changed without changing anything on the JavaScript end.
 
-A type can be made to present as this type by using the `Opacify` constructor, so given a type `t`,
-`Opacify(t)` wraps the value in such a way that it is parseable as an `Opaque`.
+A type can be made to present as this type by using the `Unspecify` constructor, so given a type `t`,
+`Unspecify(t)` wraps the value in such a way that it is parseable as an `Unspecified`.
 
 
 ####Compound Types

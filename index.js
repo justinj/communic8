@@ -111,10 +111,8 @@ export const ArgTypes = {
       }
     };
   },
-  // this lets a type pretend to be an Opaque, which is equivalent to Array(Byte).
-  // I don't like the name Opaque/Opacify for this but I'm struggling to think
-  // of anything better :(
-  Opacify: function(t) {
+  // this lets a type pretend to be an Unspecified, which is equivalent to Array(Byte).
+  Unspecify: function(t) {
     return {
       serialize(values) {
         let serialized = t.serialize(values);
@@ -127,7 +125,7 @@ export const ArgTypes = {
   }
 };
 
-ArgTypes.Opaque = ArgTypes.Array(ArgTypes.Byte);
+ArgTypes.Unspecified = ArgTypes.Array(ArgTypes.Byte);
 
 const READY_FOR_CONSUMPTION = 1 << 0
 const WRITTEN_BY_JAVASCRIPT = 1 << 1;
