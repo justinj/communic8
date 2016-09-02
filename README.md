@@ -1,13 +1,67 @@
 #do not use me yet (and I'm not on npm yet anyway)
 
+#Communic8
+
+Communic8 is a library to make it easy to send messages between JavaScript
+running on a page and the PICO-8 webplayer.
+
+##Quick usage example
+
+In PICO-8:
+```lua
+functions = {}
+-- define a function with id 0 that JavaScript can call into
+functions[0] = {
+  -- define what datatypes this function can take
+  input={
+    arg_types.byte,
+    arg_types.byte
+  },
+  -- define what datatypes this function returns
+  output={
+    arg_types.byte
+  },
+  -- how the function is actually executed
+  execute=function(args)
+    return {args[1] + args[2]}
+  end
+}
+
+update_communic8 = init_communic8(functions)
+function _update()
+  update_communic8()
+end
+```
+
+In JavaScript:
+
+```javascript
+var add = RPC({
+  id: 0, // a unique byte to identify the RPC
+  input: [
+    ArgTypes.Byte,
+    ArgTypes.Byte
+  ],
+  output: [
+    ArgTypes.Byte
+  ]
+});
+
+var bridge = connect();
+bridge.send(add(2, 3)).then((function(result) {
+  console.log("2 + 3 =", result[0]); // => "2 + 3 = 5"
+});
+```
+
+##API
+
 ###Defining Messages
 
-Message types must be defined on both the JavaScript and PICO-8 sides of the communication.
 At the moment things are only implemented such that JavaScript is always the
 caller and PICO-8 is always the receiver, however the format allows for the
 reverse, as well.
-An example of an RPC that adds two bytes might look like this:
 
+In JavaScript we define the RPCs so we can create invocations to send to PICO-8:
 ```javascript
 var add = RPC({
   id: 0, // a unique byte to identify the RPC
@@ -21,6 +75,7 @@ var add = RPC({
 });
 ```
 
+On the PICO-8 end, this looks like this:
 ```lua
 functions[0] = { -- add, has id 0
   input={
@@ -35,6 +90,8 @@ functions[0] = { -- add, has id 0
   end
 }
 ```
+
+Note that since the computation is actually only happening on the PICO-8 side, that's the only side that has an implementation for the function.
 
 Return values are always arrays, to easily support multiple return values (though I'm thinking of changing this and only allowing singular values, and making return values require using a tuple instead).
 
@@ -89,16 +146,16 @@ We have to tell communic8 how to handle the different messages we will receive f
 ```lua
 functions = {}
 functions[0] = { -- add, has id 0
-	 input={
-	   arg_types.byte,
-	   arg_types.byte
-	 },
-	 output={
-	   arg_types.byte
-	 },
-	 execute=function(args)
-	 	 return {args[1] + args[2]}
-	 end
+  input={
+    arg_types.byte,
+    arg_types.byte
+  },
+  output={
+    arg_types.byte
+  },
+  execute=function(args)
+    return {args[1] + args[2]}
+  end
 }
 ```
 
