@@ -5,9 +5,14 @@
 Communic8 is a library to make it easy to send messages between JavaScript
 running on a page and the PICO-8 webplayer.
 
+The PICO-8 webplayer exposes a shared array to allow communication with the browser.
+This library manages that shared array for you to make that communication simple.
+
 ##Quick usage example
 
-In PICO-8:
+The general idea is that PICO-8 exposes RPCs (Remote Procedure Calls), which
+JavaScript can call into.
+We can define an RPC and start communic8 as follows:
 ```lua
 functions = {}
 -- define a function with id 0 that JavaScript can call into
@@ -33,7 +38,8 @@ function _update()
 end
 ```
 
-In JavaScript:
+In JavaScript, we need to define the same RPC so JavaScript knows how to talk to PICO-8.
+We then start communic8 and send the message over, wait for the response, and then print it out.
 
 ```javascript
 var add = RPC({
