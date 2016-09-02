@@ -8,11 +8,38 @@ running on a page and the PICO-8 webplayer.
 The PICO-8 webplayer exposes a shared array to allow communication with the browser.
 This library manages that shared array for you to make that communication simple.
 
+If you're just coming at this from PICO-8 land, keep in mind you'll probably
+want some familiarity with JS to make use of this.
+
+##What can you do with it?
+
+Lots of things! Anything you need PICO-8 to talk to an external program for,
+this will help you with.
+
+I originally made it so I could make a tool for making Tool Assisted Speedruns,
+specifically for CELESTE, I wanted to be able to step through the game
+frame-by-frame, forwards and backwards in order to get perfect play.
+
+However, it's much more versatile than that.
+Here are some ideas:
+
+* Sending extra data into PICO-8 ([example](https://twitter.com/justinjaffray/status/771737798101594112))
+* High score boards
+* Bigger effects (change the background of the webpage in response to events in the game!)
+* Tools for orchestrating the play of a game (such as my TAS tool)
+* Online play (someone please make a pokemon ripoff with online trading)
+
+and probably much more I haven't even thought of!
+
 ##Quick usage example
 
 The general idea is that PICO-8 exposes RPCs (Remote Procedure Calls), which
 JavaScript can call into.
-We can define an RPC and start communic8 as follows:
+
+For this example, we'll just set up a little function inside PICO-8 that
+returns the sum of two numbers.
+
+We define an RPC and start communic8 as follows:
 ```lua
 functions = {}
 -- define a function with id 0 that JavaScript can call into
@@ -38,7 +65,7 @@ function _update()
 end
 ```
 
-In JavaScript, we need to define the same RPC so JavaScript knows how to talk to PICO-8.
+In JavaScript, we need to define the same RPC so it knows how to talk to PICO-8.
 We then start communic8 and send the message over, wait for the response, and then print it out.
 
 ```javascript
