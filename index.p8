@@ -87,7 +87,7 @@ arg_types = {
       end,
     }
   end,
-  function opacify(t)
+  opacify=function(t)
     return {
       serialize=function(v)
         local ser = t.serialize(v)
