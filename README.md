@@ -38,6 +38,8 @@ JavaScript can call into.
 
 For this example, we'll just set up a little function inside PICO-8 that
 returns the sum of two numbers.
+We can make these functions do anything we want, but this is an easy example to
+see stuff actually happening.
 
 We define an RPC and start communic8 as follows:
 ```lua
