@@ -160,6 +160,10 @@ is mapped to a global JavaScript array, `pico8_gpio`.
 Both PICO-8 and JavaScript can read and write to this section, and both can
 poll reading it at 60fps.
 
+The PICO-8 webplayer has a scheduler which allows it to get interrupted in the
+middle of an `_update` loop sometimes. This means it's important that PICO-8
+locks the pins when it is in the middle of writing to them.
+
 ###Solution used here
 
 Note: I know nothing about networking/protocols
@@ -177,7 +181,9 @@ Remarks:
 * The restriction that the length of a message must fit into a short is not as much of a problem as it sounds, messages that large would struggle to fit into PICO-8's available memory.
 * The fact that we use a single byte for the ID means we can have at most 256 messages in flight at one time. Since (currently) messages are all resolved synchronously, I don't see this being a problem
 * The arbitary number of 0's and the header byte are a necessary requirement since all messages come in 128-byte chunks. A short message must be padded to fit into the 128-byte space.
-
+* Messages are quite compact, which is beneficial since we only have 128 bytes per frame
+* Impossible to interpret a message without context/id/the type of RPC it is,
+  so if something goes wrong it's very difficult to inspect the message to see its meaning
 
 1 byte at the beginning of the 128-byte space is reserved as a header to indicate
 
@@ -190,12 +196,3 @@ the pins as consumed after consuming it.
 There could be multiple messages in one filling of the GPIO pins, and there could be a message spread out over multiple.
 The GPIO pins should be thought of more as a continuous stream of bytes.
 
-
-### Benefits of this approach
-
-Not many headers, so messages are quite compact, which is beneficial since we only have 128 bytes
-
-### Drawbacks of this approach
-
-Impossible to interpret a message without context/id/the type of RPC it is,
-so if something goes wrong it's very difficult to inspect the message to see its meaning
