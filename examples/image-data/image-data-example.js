@@ -23,19 +23,19 @@ var COLORS = [
 ];
 
 function sqDist(a, b) {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    let d = a[i] - b[i];
+  var sum = 0;
+  for (var i = 0; i < a.length; i++) {
+    var d = a[i] - b[i];
     sum += d * d;
   }
   return sum;
 }
 
 function getClosestColor(color) {
-  let bestDist = Infinity;
-  let best = -1;
+  var bestDist = Infinity;
+  var best = -1;
   COLORS.forEach((col, i) => {
-    let dist = sqDist(col, color);
+    var dist = sqDist(col, color);
     if (dist < bestDist) {
       bestDist = dist;
       best = i;
@@ -51,15 +51,17 @@ var RPC = Communic8.RPC;
 var ArgTypes = Communic8.ArgTypes;
 
 var bridge = connect();
+
 var sendImageRow = RPC({
   id: 0,
+  // First argument is the row of data, second argument is which row it is
   input: [ ArgTypes.Array(ArgTypes.Byte), ArgTypes.Byte ],
   output: []
 });
 
 
 function pixelAt(data, x, y) {
-  return getClosestColor([data[y*4*127+x*4],     data[y*4*127+x*4 + 1],     data[y*4*127+x*4 + 2]]);
+  return getClosestColor([data[y*4*128+x*4], data[y*4*128+x*4 + 1], data[y*4*128+x*4 + 2]]);
 }
 
 var img = document.getElementById('img');
@@ -68,20 +70,20 @@ var canvas = document.getElementById('c');
 img.onload = function(e) {
   var ctx = canvas.getContext('2d');
   ctx.drawImage(img, 0, 0);
-  let data = ctx.getImageData(0, 0, 127, 127).data;
-  for (let y = 0; y < 128; y++) {
-    let row = [];
-    for (let x = 0; x < 128; x+=2) {
+  var data = ctx.getImageData(0, 0, 128, 128).data;
+  for (var y = 0; y < 128; y++) {
+    var row = [];
+    for (var x = 0; x < 128; x+=2) {
       // each byte can store 2 pixels
-      let a = pixelAt(data, x, y)
-      let b = pixelAt(data, x + 1, y)
+      var a = pixelAt(data, x, y)
+      var b = pixelAt(data, x + 1, y)
       row.push(a*16+b)
     }
     bridge.send(sendImageRow(row, y));
   }
 }
 
-document.body.addEventListener('drop', (e) => {
+document.body.addEventListener('drop', function(e) {
   e.preventDefault();
   e.stopPropagation();
   var reader = new FileReader();
@@ -92,7 +94,7 @@ document.body.addEventListener('drop', (e) => {
 });
 
 
-document.body.addEventListener('dragover', (e) => {
+document.body.addEventListener('dragover', function(e) {
   e.preventDefault();
 });
 })();
