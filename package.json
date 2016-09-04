@@ -1,5 +1,5 @@
 {
-  "name": "ponto",
+  "name": "communic8",
   "version": "0.0.1",
   "description": "PICO-8/JS Bridge",
   "main": "index.js",
@@ -15,10 +15,10 @@
   "author": "Justin Jaffray",
   "repository": {
     "type": "git",
-    "url": "https://github.com/justinj/ponto.git"
+    "url": "https://github.com/justinj/communic8.git"
   },
   "bugs": {
-    "url": "https://github.com/justinj/ponto/issues"
+    "url": "https://github.com/justinj/communic8/issues"
   },
   "license": "MIT",
   "devDependencies": {
@@ -28,6 +28,5 @@
     "babel-preset-stage-2": "^6.1.18",
     "eslint": "^2.1.0",
     "mocha": "^2.3.4"
-  },
-  "dependencies": {}
+  }
 }
