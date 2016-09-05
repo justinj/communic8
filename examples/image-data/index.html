@@ -8,6 +8,13 @@
 <STYLE TYPE="text/css">
 <!--
 
+.explanation {
+  font-size: 30px;
+  color: white;
+  font-family: Arial;
+  text-align: center;
+}
+
 #img, #c {
   display: none;
 }
@@ -47,6 +54,10 @@ canvas#canvas { width: 580px; height: 540px; }
 </head>
 
 <body bgcolor=#303030>
+
+  <div class='explanation'>
+    Drag an image you have stored locally onto this page!
+  </div>
 
 	<br><br><br>
 
@@ -131,11 +142,10 @@ canvas#canvas { width: 580px; height: 540px; }
 
 	</div></center>
 	<br><br>
-
   <img id='img'>
   <canvas id='c'></canvas>
 
-  <script src='/dist/communic8.min.js'></script>
+  <script src='communic8.min.js'></script>
   <script src='image-data-example.js'></script>
 
 </body></html>

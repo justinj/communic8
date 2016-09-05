@@ -34,7 +34,7 @@ function sqDist(a, b) {
 function getClosestColor(color) {
   var bestDist = Infinity;
   var best = -1;
-  COLORS.forEach((col, i) => {
+  COLORS.forEach(function(col, i) {
     var dist = sqDist(col, color);
     if (dist < bestDist) {
       bestDist = dist;
@@ -69,7 +69,10 @@ var canvas = document.getElementById('c');
 
 img.onload = function(e) {
   var ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0);
+  var scale = Math.min(128 / img.width, 128 / img.height);
+  var w = img.width * scale;
+  var h = img.height * scale;
+  ctx.drawImage(img, (128 - w) / 2, (128 - h) / 2, w, h);
   var data = ctx.getImageData(0, 0, 128, 128).data;
   for (var y = 0; y < 128; y++) {
     var row = [];
