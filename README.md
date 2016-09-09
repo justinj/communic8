@@ -1,4 +1,5 @@
-#do not use me yet (and I'm not on npm yet anyway)
+## This is still alpha software and could have bugs or missing features, please use at your own risk
+(that said, trying it out and reporting bugs and problems is much appreciated!)
 
 #Communic8
 
@@ -33,8 +34,8 @@ and probably much more I haven't even thought of!
 
 ##Quick usage example
 
-The general idea is that PICO-8 exposes RPCs (Remote Procedure Calls), which
-JavaScript can call into.
+The general idea is that PICO-8 exposes messages that it can receive
+(RPC/Remote Procedure Calls), which JavaScript can call into.
 
 For this example, we'll just set up a little function inside PICO-8 that
 returns the sum of two numbers.
