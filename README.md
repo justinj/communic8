@@ -88,6 +88,9 @@ bridge.send(add(2, 3)).then((function(result) {
 });
 ```
 
+If you just want to jump into some working examples, look in the `examples/`
+folder for some functional examples.
+
 ##Getting it
 
 If you're npm-inclined, you know the drill:
@@ -97,7 +100,7 @@ npm install --save communic8
 ```
 
 but if you'd rather just have a file you can include in a `<script>` tag, check
-out the `/dist` folder in this repo for a compiled version.
+out the `dist/` folder in this repo for a compiled version.
 
 ##API
 
