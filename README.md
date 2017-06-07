@@ -1,7 +1,7 @@
 ## This is still alpha software and could have bugs or missing features, please use at your own risk
 (that said, trying it out and reporting bugs and problems is much appreciated!)
 
-#Communic8
+# Communic8
 
 Communic8 is a library to make it easy to send messages between JavaScript
 running on a page and the PICO-8 webplayer.
@@ -12,7 +12,7 @@ This library manages that shared array for you to make that communication simple
 If you're just coming at this from PICO-8 land, keep in mind you'll probably
 want some familiarity with JS to make use of this.
 
-##What can you do with it?
+## What can you do with it?
 
 Lots of things! Anything you need PICO-8 to talk to an external program for,
 this will help you with.
@@ -32,7 +32,7 @@ Here are some ideas:
 
 and probably much more I haven't even thought of!
 
-##Quick usage example
+## Quick usage example
 
 The general idea is that PICO-8 exposes messages that it can receive
 (RPC/Remote Procedure Calls), which JavaScript can call into.
@@ -92,7 +92,7 @@ bridge.send(add(2, 3)).then((function(result) {
 If you just want to jump into some working examples, look in the `examples/`
 folder for some functional examples.
 
-##Getting it
+## Getting it
 
 If you're npm-inclined, you know the drill:
 
@@ -103,9 +103,9 @@ npm install --save communic8
 but if you'd rather just have a file you can include in a `<script>` tag, check
 out the `dist/` folder in this repo for a compiled version.
 
-##API
+## API
 
-###Defining Messages
+### Defining Messages
 
 At the moment things are only implemented such that JavaScript is always the
 caller and PICO-8 is always the receiver, however the format allows for the
@@ -145,7 +145,7 @@ Note that since the computation is actually only happening on the PICO-8 side, t
 
 Return values are always arrays, to easily support multiple return values (though I'm thinking of changing this and only allowing singular values, and making return values require using a tuple instead).
 
-###Communicating From JavaScript
+### Communicating From JavaScript
 
 In JS-land we connect (start polling) and get an instance of the bridge:
 
@@ -222,7 +222,7 @@ function _update()
 end
 ```
 
-###Datatypes
+### Datatypes
 
 In JS-land, datatypes are implemented as objects with a `serialize` and `deserialize` pair of functions.
 ```
@@ -241,26 +241,26 @@ const Byte = {
 `serialize` returns an array of bytes representing the value.
 `deserialize` returns a pair of the value and the remaining bytes to be deserialized.
 
-####Base Types
+#### Base Types
 
-#####Boolean
+##### Boolean
 
 A boolean value. Stored as 0 for false and 1 for true.
 
-#####Byte
+##### Byte
 
 A single byte.
 
-#####Number
+##### Number
 
 A 32-bit fixed point PICO-8 number.
 2 bytes at the beginning represent the whole part of the number and 2 bytes at the end represent the fractional part.
 
-#####String
+##### String
 
 A string of characters.
 
-#####Unspecified
+##### Unspecified
 
 An unspecified stream of bytes.
 This is used when one end of the message shouldn't know anything about the format, for instance,
@@ -271,21 +271,21 @@ A type can be made to present as this type by using the `Unspecify` constructor,
 `Unspecify(t)` wraps the value in such a way that it is parseable as an `Unspecified`.
 
 
-####Compound Types
+#### Compound Types
 
-#####Array(<type>)
+##### Array(<type>)
 
 An array of the given type. For instance, `Array(Byte)` is an array of bytes,
 `Array(Number)` is an array of numbers, etc.
 
-#####Tuple(...<types>)
+##### Tuple(...<types>)
 
 A tuple of the given types.
 For instance, `Tuple(Byte, Boolean, Number)` would represent values like `[123, true, -45.24]`.
 
-##Low-Level Protocol
+## Low-Level Protocol
 
-###Requirements
+### Requirements
 
 The setup is this:
 There's a 128-byte region of memory (`0x5f80` to `0x5fff`) within PICO-8 which
@@ -297,7 +297,7 @@ The PICO-8 webplayer has a scheduler which allows it to get interrupted in the
 middle of an `_update` loop sometimes. This means it's important that PICO-8
 locks the pins when it is in the middle of writing to them.
 
-###Solution used here
+### Solution used here
 
 Note: I know nothing about networking/protocols
 
@@ -330,6 +330,6 @@ There could be multiple messages in one filling of the GPIO pins, and there coul
 The GPIO pins should be thought of more as a continuous stream of bytes.
 
 
-##Credit
+## Credit
 
 Thanks Sean LeBlanc for looking over the README and making some helpful suggestions.
