@@ -186,7 +186,7 @@ for more on them, or
 [this](http://robotlolita.me/2015/11/15/how-do-promises-work.html) for a
 *very* in-depth and *very* good read on them.
 
-###Communicating from PICO-8
+### Communicating from PICO-8
 
 Include the stub in `index.p8` in your cart.
 There are two values exposed, `arg_types` and `init_communic8`.
